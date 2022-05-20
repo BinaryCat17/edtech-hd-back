@@ -1,0 +1,1 @@
+SELECT * FROM users WHERE team = $1;

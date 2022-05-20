@@ -1,0 +1,23 @@
+[run]
+api = "rest"
+storage = "sql"
+
+[rest.server]
+host = "localhost"
+port = "8081"
+
+[sql.database]
+host = "localhost"
+name = "edtech_hd_back"
+password = "12345"
+port = "5432"
+user = "binarycat"
+
+[access.user]
+READ = ["users", "team_users"]
+WRITE = ["users"]
+
+[access.admin]
+extends = "user"
+ADD = ["users"]
+REMOVE = ["users"]
