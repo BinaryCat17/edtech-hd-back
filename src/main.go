@@ -1,16 +1,22 @@
 package main
 
 import (
-	back_sql "edtech/Data/SQL"
+	api_rest "edtech/api/rest"
+	storage_sql "edtech/storage/sql"
 )
 
 func main() {
 	conf := LoadConfig()
 
-	db := back_sql.NewSQLBase(conf.Database.Host, conf.Database.Port, conf.Database.User, conf.Database.Password, conf.Database.Name)
-	defer db.Close()
+	if conf.Run.Api == "rest" && conf.Run.Storage == "sql" {
+		db := storage_sql.NewSQLBase(
+			conf.Storage_sql.Host,
+			conf.Storage_sql.Port,
+			conf.Storage_sql.User,
+			conf.Storage_sql.Password,
+			conf.Storage_sql.Name)
+		defer db.Close()
 
-	// service := NewRestService()
-	// service.InitDB()
-	// service.Run(":8081")
+		api_rest.RunServer(conf.Api_rest.Host, conf.Api_rest.Port, &conf, &db, &db)
+	}
 }

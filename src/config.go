@@ -6,7 +6,12 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-type ConfigDatabase struct {
+type TOML_Run struct {
+	Api     string
+	Storage string
+}
+
+type TOML_SQL struct {
 	Host     string
 	Port     string
 	User     string
@@ -14,37 +19,47 @@ type ConfigDatabase struct {
 	Name     string
 }
 
-type ConfigServer struct {
+type TOML_REST struct {
 	Host string
 	Port string
 }
 
-type ConfigRule struct {
-	Extends string
-	GET     []string
-	POST    []string
-	PUT     []string
-	DELETE  []string
+type TOML_Rule struct {
+	Extends       []string
+	READ_PUBLIC   []string `toml:"read-public"`
+	READ_PRIVATE  []string `toml:"read-private"`
+	WRITE_PUBLIC  []string `toml:"write-public"`
+	WRITE_PRIVATE []string `toml:"write-private"`
 }
 
-type Config struct {
-	Server      ConfigServer
-	Database    ConfigDatabase
-	Permissions map[string]ConfigRule
+type TOML_Config struct {
+	Run         TOML_Run
+	Api_rest    TOML_REST
+	Storage_sql TOML_SQL
+	Access      map[string]TOML_Rule
 }
 
-func (cfg Config) HasPermissions(user, command, method string) bool {
-	if val, ok := cfg.Permissions[user]; ok {
+func LoadConfig() TOML_Config {
+	var conf TOML_Config
+	_, err := toml.DecodeFile("../data/config.toml", &conf)
+	if err != nil {
+		log.Fatalln("Can't load config.toml :", err)
+	}
+	return conf
+}
+
+func (cfg *TOML_Config) HasAccess(role string, mode, perms bool, command string) bool {
+	if val, ok := cfg.Access[role]; ok {
 		permitted := []string{}
-		switch method {
-		case "GET":
-			permitted = val.GET
-		case "POST":
-			permitted = val.POST
-		case "PUT":
-			permitted = val.PUT
-		case "DELETE":
-			permitted = val.DELETE
+
+		if perms && mode {
+			permitted = val.WRITE_PUBLIC
+		} else if perms && !mode {
+			permitted = val.READ_PUBLIC
+		} else if !perms && mode {
+			permitted = val.WRITE_PRIVATE
+		} else if !perms && !mode {
+			permitted = val.READ_PRIVATE
 		}
 
 		for _, cmd := range permitted {
@@ -53,18 +68,11 @@ func (cfg Config) HasPermissions(user, command, method string) bool {
 			}
 		}
 
-		if val.Extends != "" {
-			return cfg.HasPermissions(val.Extends, command, method)
+		for _, e := range val.Extends {
+			if cfg.HasAccess(e, mode, perms, command) {
+				return true
+			}
 		}
 	}
 	return false
-}
-
-func LoadConfig() Config {
-	var conf Config
-	_, err := toml.DecodeFile("config.toml", &conf)
-	if err != nil {
-		log.Fatalln("Can't load config.toml :", err)
-	}
-	return conf
 }

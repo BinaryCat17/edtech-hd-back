@@ -1,0 +1,9 @@
+SELECT
+    username,
+    fullname,
+    email,
+    team_role,
+    team,
+    about
+FROM
+    users;

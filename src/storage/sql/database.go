@@ -1,20 +1,17 @@
-package back_sql
+package storage_sql
 
 import (
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"path"
 
 	_ "github.com/lib/pq"
 )
 
 type SQLBase struct {
 	db *sql.DB
-}
-
-type SQLQuery struct {
-	columns []string
-	rows    *sql.Rows
 }
 
 func NewSQLBase(dHost, dPort, dUser, dPassword, dName string) SQLBase {
@@ -38,7 +35,7 @@ func (d *SQLBase) Close() {
 	d.db.Close()
 }
 
-func (d *SQLBase) ExecQuery(sqlString string, args []string) (SQLQuery, error) {
+func (d *SQLBase) ExecQuery(sqlString string, args []string) ([]string, *sql.Rows, error) {
 	interfaces := make([]interface{}, len(args))
 	for i := 0; i < len(args); i++ {
 		interfaces[i] = args[i]
@@ -46,13 +43,24 @@ func (d *SQLBase) ExecQuery(sqlString string, args []string) (SQLQuery, error) {
 
 	rows, err := d.db.Query(sqlString, interfaces...)
 	if err != nil {
-		return SQLQuery{nil, nil}, err
+		return nil, nil, err
 	}
 
 	columns, err := rows.Columns()
 	if err != nil {
 		rows.Close()
-		return SQLQuery{nil, nil}, err
+		return nil, nil, err
 	}
-	return SQLQuery{columns, rows}, nil
+	return columns, rows, nil
+}
+
+func (db *SQLBase) ExecFile(command, method string, args []string) ([]string, *sql.Rows, error) {
+	sql_path := path.Join("../data/sql", method, command+".sql")
+	file, err := ioutil.ReadFile(sql_path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	columns, rows, err := db.ExecQuery(string(file), args)
+	return columns, rows, err
 }

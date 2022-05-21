@@ -1,131 +1,116 @@
-package back_rest
+package api_rest
 
 import (
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
+	"errors"
 	"log"
 	"net/http"
-	"path"
 	"strings"
-	"edtech/"
 )
 
 type RestService struct {
-	db back_sql SQLBase
+	AccessValidator
+	LoginValidator
+	QueryExecuter
 }
 
-func NewRestService() RestService {
-	return RestService{}
+type QueryProcess struct {
+	Username string
+	Target   string
+	Role     string
+	Access   bool
+	Method   string
+	Command  string
+	Args     []string
 }
 
-func (s *RestService) InitDB() {
-	s.db = NewSQLBase()
-}
-
-func LoadQuery(w http.ResponseWriter, method, command string) (string, error) {
-	sql_path := path.Join("./queries", method, command+".sql")
-	file, err := ioutil.ReadFile(sql_path)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, "Can't open query file", sql_path, ":", err)
-		return "", err
-	}
-	return string(file), nil
-}
-
-func (s *RestService) InternalError(w http.ResponseWriter, msg string, err error) error {
-	w.WriteHeader(http.StatusInternalServerError)
-	fmt.Fprintln(w, msg, ":", err)
-	return err
-}
-
-func (s *RestService) VerifyUserPass(w http.ResponseWriter, r *http.Request) (string, error) {
-	file, err := LoadQuery(w, "AUTH", "permissions")
-	if err != nil {
-		return "", s.InternalError(w, "Permissions query can't load", err)
-	}
-
+func (s *RestService) AuthorizeQuery(r *http.Request) (*QueryProcess, error) {
+	var query QueryProcess
 	user, pass, ok := r.BasicAuth()
+
 	if ok {
-		_, rows, err := s.db.ExecQuery(file, []string{user, pass})
+		query.Username = user
+		role, err := s.LoginValidator.AccesRules(user, pass)
 		if err != nil {
-			return "", s.InternalError(w, "Permissions query can't load", err)
+			return nil, err
 		}
-		var permissions string
-		if rows.Scan(&permissions) == nil {
-			return permissions, nil
-		}
+		query.Role = role
+
+	} else {
+		query.Role = "unauthorized"
 	}
 
-	w.Header().Set("WWW-Authenticate", `Basic realm="api"`)
-	http.Error(w, "Unauthorized", http.StatusUnauthorized)
-	return "", fmt.Errorf("Unauthorized")
+	return &query, nil
 }
 
-func AuthorizeCommand(w http.ResponseWriter, r *http.Request, permissions string) (string, []string, error) {
-	args := strings.Split(r.URL.Path, "/")
+func (q *QueryProcess) ParseMethod(r *http.Request) error {
+	switch r.Method {
+	case "GET":
+		q.Access = AccessRead
+		q.Method = "READ"
+	case "POST":
+		q.Access = AccessWrite
+		q.Method = "WRITE"
+	default:
+		return errors.New("method not allowed")
+	}
+	return nil
+}
 
-	if len(args) < 2 {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "Command not specified")
-		return "", nil, fmt.Errorf("Command not specified")
+func (q *QueryProcess) ParseCommand(r *http.Request) error {
+	q.Args = strings.Split(r.URL.Path, "/")
+
+	if len(q.Args) < 3 || q.Args[1] != "command" {
+		return errors.New("command not specified")
 	}
 
-	return args[1], args[2:], nil
+	q.Command = q.Args[2]
+	q.Target = q.Args[3]
+	q.Args = q.Args[3:]
+	return nil
 }
 
 func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	//permissions, err := s.VerifyUserPass(w, r)
-	// if err != nil {
-	// 	return
-	// }
-
-	args := strings.Split(r.URL.Path, "/")
-
-	if len(args) < 2 {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "Command not specified")
-		return
-	}
-
-	command := args[1]
-
-	file, err := LoadQuery(w, r.Method, command)
+	q, err := s.AuthorizeQuery(r)
 	if err != nil {
+		w.Header().Set("WWW-Authenticate", `Basic realm="api"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	if r.Method == "GET" {
-		query, err := s.db.JSONQuery(string(file), args[2:])
-		if err != nil {
-			s.InternalError(w, "Error JSONQuery "+command, err)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(query)
-
-	} else if r.Method == "POST" || r.Method == "PUT" || r.Method == "DELETE" {
-		s.db.EmptyQuery(string(file), args[2:])
-
-		if err != nil {
-			s.InternalError(w, "Error EmptyQuery "+command, err)
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	err = q.ParseMethod(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusMethodNotAllowed)
+		return
 	}
 
+	err = q.ParseCommand(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if !s.AccessValidator.HasAccess(q.Role, q.Access, q.Username != q.Target, q.Command) {
+		http.Error(w, "No rights to execute the command", http.StatusForbidden)
+		return
+	}
+
+	res, err := s.QueryExecuter.Execute(q.Command, q.Method, q.Args)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(res)
 }
 
-func (s *RestService) Run(addr string) {
-	defer s.db.close()
+func RunServer(addr, port string,
+	access AccessValidator, login LoginValidator, query QueryExecuter) {
 
-	// r := mux.NewRouter()
-
-	if err := http.ListenAndServe(addr, s); err != nil {
-		log.Fatalln("Serve error: ", err)
+	s := &RestService{access, login, query}
+	if err := http.ListenAndServe(addr+":"+port, s); err != nil {
+		log.Fatalln("Server fatal error: ", err)
 	}
 }

@@ -1,0 +1,27 @@
+[run]
+api = "rest"
+storage = "sql"
+
+[api_rest]
+host = "localhost"
+port = "8081"
+
+[storage_sql]
+host = "localhost"
+name = "edtech_hd_back"
+password = "12345"
+port = "5432"
+user = "binarycat"
+
+[access.unauthorized]
+write-public = ["register"]
+read-public = ["login"]
+
+[access.user]
+read-private = ["self-info"]
+write-private = ["self-info"]
+read-public = ["user-info", "team-users", "user-team-info"]
+
+[access.teamleader]
+extends = ["user"]
+write-public = ["user-team-info"]

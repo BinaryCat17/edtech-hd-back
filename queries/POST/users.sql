@@ -1,1 +1,0 @@
-INSERT INTO users (username, password, fullname, email, team_role, about, team) VALUES ($1, $2, $3, $4, $5, $6);
