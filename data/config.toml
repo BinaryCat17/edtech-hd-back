@@ -3,12 +3,12 @@ api = "rest"
 storage = "sql"
 
 [api_rest]
-host = "localhost"
-port = "8081"
+host = "192.168.88.250"
+port = "8082"
 
 [storage_sql]
 host = "localhost"
-name = "edtech_hd_back"
+name = "edtech"
 password = "12345"
 port = "5432"
 user = "binarycat"
@@ -18,6 +18,7 @@ write-public = ["register"]
 read-public = ["login"]
 
 [access.user]
+extends = ["unauthorized"]
 read-private = ["self-info"]
 write-private = ["self-info"]
 read-public = ["user-info", "team-users", "user-team-info"]

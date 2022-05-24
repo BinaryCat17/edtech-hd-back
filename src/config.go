@@ -57,9 +57,11 @@ func (cfg *TOML_Config) HasAccess(role string, mode, perms bool, command string)
 		} else if perms && !mode {
 			permitted = val.READ_PUBLIC
 		} else if !perms && mode {
-			permitted = val.WRITE_PRIVATE
+			permitted = append(permitted, val.WRITE_PRIVATE...)
+			permitted = append(permitted, val.WRITE_PUBLIC...)
 		} else if !perms && !mode {
-			permitted = val.READ_PRIVATE
+			permitted = append(permitted, val.READ_PRIVATE...)
+			permitted = append(permitted, val.READ_PUBLIC...)
 		}
 
 		for _, cmd := range permitted {

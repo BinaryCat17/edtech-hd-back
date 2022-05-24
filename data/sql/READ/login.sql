@@ -1,1 +1,1 @@
-SELECT access FROM users WHERE username=$1 AND password=$2;
+SELECT access FROM users WHERE username=$1;

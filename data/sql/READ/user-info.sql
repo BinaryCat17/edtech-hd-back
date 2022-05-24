@@ -3,7 +3,7 @@ SELECT
     fullname,
     email,
     team_role,
-    team,
+    teamname,
     about
 FROM
     users;

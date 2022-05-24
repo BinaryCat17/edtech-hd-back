@@ -17,6 +17,6 @@ func main() {
 			conf.Storage_sql.Name)
 		defer db.Close()
 
-		api_rest.RunServer(conf.Api_rest.Host, conf.Api_rest.Port, &conf, &db, &db)
+		api_rest.RunServer(conf.Api_rest.Host, conf.Api_rest.Port, &conf, &db, &db, &db)
 	}
 }
