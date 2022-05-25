@@ -43,7 +43,6 @@ func (s *RestService) AuthorizeQuery(w http.ResponseWriter, r *http.Request) (*Q
 		sessionToken := uuid.NewString()
 		expiresAt := time.Now().Add(48 * time.Hour)
 		if s.SessionValidator.Authorize(user, sessionToken, expiresAt) == nil {
-			fmt.Println("Setting cookie ", user, sessionToken, expiresAt)
 			http.SetCookie(w, &http.Cookie{
 				Name:    "session_token",
 				Value:   sessionToken,
@@ -51,20 +50,21 @@ func (s *RestService) AuthorizeQuery(w http.ResponseWriter, r *http.Request) (*Q
 				Expires: expiresAt,
 			})
 		}
-	} else {
-		c, err := r.Cookie("session_token")
-		if err != nil {
-			return nil, err
-		}
+		return nil, nil
+	}
 
-		username, role := s.SessionValidator.IsAuthorized(c.Value)
-		fmt.Println(username, role)
-		if len(username) == 0 {
-			return nil, errors.New("unauthorized")
-		} else {
-			query.Role = role
-			query.Username = username
-		}
+	c, err := r.Cookie("session_token")
+	if err != nil {
+		return nil, err
+	}
+
+	username, role := s.SessionValidator.IsAuthorized(c.Value)
+	fmt.Println(username, role)
+	if len(username) == 0 {
+		return nil, errors.New("unauthorized")
+	} else {
+		query.Role = role
+		query.Username = username
 	}
 
 	return &query, nil
@@ -84,10 +84,8 @@ func (q *QueryProcess) ParseMethod(r *http.Request) error {
 	return nil
 }
 
-func (q *QueryProcess) ParseCommand(r *http.Request, user string) error {
-	q.Args = strings.Split(r.URL.Path, "/")
-
-	if len(q.Args) < 3 || q.Args[1] != "api" {
+func (q *QueryProcess) ParseCommand(user string) error {
+	if len(q.Args) < 3 {
 		return errors.New("command not specified")
 	}
 
@@ -103,20 +101,39 @@ func (q *QueryProcess) ParseCommand(r *http.Request, user string) error {
 }
 
 func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(r.URL)
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-
 	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	q, err := s.AuthorizeQuery(w, r)
 	if err != nil {
-		w.Header().Set("WWW-Authenticate", `Basic realm="api"`)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		http.Redirect(w, r, "http://чёрныйящик.рф/signin", http.StatusSeeOther)
+		return
+	}
+
+	if q == nil {
+		http.Redirect(w, r, "http://чёрныйящик.рф/team", http.StatusSeeOther)
+		return
+	}
+
+	q.Args = strings.Split(r.URL.Path, "/")
+	if q.Args[1] == "app" {
+		newURL := "http://192.168.88.250:8081" + r.URL.Path
+		http.Redirect(w, r, newURL, http.StatusSeeOther)
+		return
+	}
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+	if q.Args[1] != "api" {
+		http.Error(w, "Что тебе нужно от меня, друг?", http.StatusNotFound)
 		return
 	}
 
@@ -126,7 +143,7 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = q.ParseCommand(r, q.Username)
+	err = q.ParseCommand(q.Username)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -139,7 +156,6 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.QueryExecuter.Execute(q.Command, q.Method, q.Args)
 	if err != nil {
-		fmt.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

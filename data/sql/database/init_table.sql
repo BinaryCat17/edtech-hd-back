@@ -113,9 +113,39 @@ VALUES
         'edunorog',
         'aboba',
         'Диденко',
-        'megachel@gmail.com',
+        'megachel1@gmail.com',
         'Оценщики',
         'scrum master',
         'I like startaps',
+        'user'
+    ),
+    (
+        'deusagile',
+        'aboba',
+        'Сергей Калюжный',
+        'megachel2@gmail.com',
+        'Оценщики',
+        'pruduct master',
+        'lol kek cheburek ',
+        'user'
+    ),
+    (
+        'qwerty',
+        'aboba',
+        'Александр Полторопавлов',
+        'megachel3@gmail.com',
+        'Оценщики',
+        'UI master',
+        'lol kek cheburek',
+        'user'
+    ),
+    (
+        'shahov',
+        'aboba',
+        'Артём Шахов',
+        'megachel4@gmail.com',
+        'Оценщики',
+        'Front master',
+        'lol kek cheburek',
         'user'
     );

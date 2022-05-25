@@ -13,6 +13,8 @@ func (db *SQLBase) Execute(command, method string, args []string) (string, error
 		return "", err
 	}
 
+	defer rows.Close()
+
 	if method != "READ" && method != "AUTH" {
 		return "", nil
 	}
@@ -59,6 +61,8 @@ func (db *SQLBase) AccesRules(username, password string) (string, error) {
 		return "", err
 	}
 
+	defer rows.Close()
+
 	var permissions string
 	rows.Next()
 	err = rows.Scan(&permissions)
@@ -74,6 +78,8 @@ func (db *SQLBase) IsAuthorized(token string) (string, string) {
 		return "", ""
 	}
 
+	defer rows.Close()
+
 	var username, role string
 	var expiresTime time.Time
 	rows.Next()
@@ -82,22 +88,25 @@ func (db *SQLBase) IsAuthorized(token string) (string, string) {
 		return "", ""
 	}
 
-	if expiresTime.Before(time.Now()) {
-		db.db.Query(
-			"DELETE FROM sessions WHERE token=$1;",
-			token)
-		return "", ""
-	}
-
 	return username, role
 }
 
 func (db *SQLBase) Authorize(username, token string, expires time.Time) error {
-	db.db.Query(
-		"DELETE FROM sessions WHERE username=$1;",
+	rows, err := db.db.Query(
+		"DELETE FROM sessions WHERE username=$1 AND expires < now();",
 		username)
-	_, err := db.db.Query(
+
+	if err == nil {
+		rows.Close()
+	}
+
+	rows, err = db.db.Query(
 		"INSERT INTO sessions (username, token, expires) VALUES ($1, $2, $3)",
 		username, token, expires)
+
+	if err == nil {
+		rows.Close()
+	}
+
 	return err
 }
