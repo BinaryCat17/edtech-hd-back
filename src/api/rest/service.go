@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"time"
 
@@ -59,7 +61,6 @@ func (s *RestService) AuthorizeQuery(w http.ResponseWriter, r *http.Request) (*Q
 	}
 
 	username, role := s.SessionValidator.IsAuthorized(c.Value)
-	fmt.Println(username, role)
 	if len(username) == 0 {
 		return nil, errors.New("unauthorized")
 	} else {
@@ -100,6 +101,24 @@ func (q *QueryProcess) ParseCommand(user string) error {
 	return nil
 }
 
+func Proxy(targetUrl string, w http.ResponseWriter, r *http.Request) {
+	var target *url.URL
+	target, err := url.Parse(targetUrl)
+	if err != nil {
+		return
+	}
+
+	origHost := target.Host
+	origScheme := target.Scheme
+	d := func(req *http.Request) {
+		req.URL.Host = origHost
+		req.URL.Scheme = origScheme
+	}
+
+	p := &httputil.ReverseProxy{Director: d}
+	p.ServeHTTP(w, r)
+}
+
 func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "OPTIONS" {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -117,14 +136,13 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if q == nil {
-		http.Redirect(w, r, "http://чёрныйящик.рф/team", http.StatusSeeOther)
+		http.Redirect(w, r, "http://чёрныйящик.рф/home", http.StatusSeeOther)
 		return
 	}
 
 	q.Args = strings.Split(r.URL.Path, "/")
 	if q.Args[1] == "app" {
-		newURL := "http://192.168.88.250:8081" + r.URL.Path
-		http.Redirect(w, r, newURL, http.StatusSeeOther)
+		Proxy("http://192.168.88.250:8081", w, r)
 		return
 	}
 
@@ -154,8 +172,30 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if q.Command == "save-file" {
+		err = uploadFile(r, q.Username)
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
+	if q.Command == "get-file" {
+		if len(q.Args) < 2 {
+			http.Error(w, "file name or user name not specified", http.StatusBadRequest)
+		} else {
+			http.ServeFile(w, r, "../data/users/"+q.Args[0]+"/"+q.Args[1])
+		}
+		return
+	}
+
 	res, err := s.QueryExecuter.Execute(q.Command, q.Method, q.Args)
 	if err != nil {
+		fmt.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

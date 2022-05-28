@@ -1,5 +1,6 @@
 SELECT
     username,
+    shortname,
     fullname,
     email,
     team_role,
