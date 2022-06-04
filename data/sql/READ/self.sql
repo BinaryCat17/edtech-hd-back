@@ -1,0 +1,1 @@
+SELECT username, fullname, id, teamname FROM users WHERE username=$1;

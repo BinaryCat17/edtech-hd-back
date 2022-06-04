@@ -1,0 +1,1 @@
+SELECT comment FROM usercomps WHERE username = $1 AND compname = $2;

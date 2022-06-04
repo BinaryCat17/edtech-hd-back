@@ -3,6 +3,7 @@ package api_rest
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -27,6 +28,7 @@ type QueryProcess struct {
 	Access   bool
 	Method   string
 	Command  string
+	Payload  string
 	Args     []string
 }
 
@@ -39,6 +41,7 @@ func (s *RestService) AuthorizeQuery(w http.ResponseWriter, r *http.Request) (*Q
 		query.Username = user
 		role, err := s.LoginValidator.AccesRules(user, pass)
 		if err != nil {
+			http.Error(w, "Invalid login or password", http.StatusUnauthorized)
 			return nil, err
 		}
 		query.Role = role
@@ -57,12 +60,26 @@ func (s *RestService) AuthorizeQuery(w http.ResponseWriter, r *http.Request) (*Q
 
 	c, err := r.Cookie("session_token")
 	if err != nil {
-		return nil, err
+		if r.Method == "GET" && (strings.Split(r.URL.Path, "/")[2] != "teams") {
+			http.Redirect(w, r, "http://чёрныйящик.рф/signin", http.StatusSeeOther)
+			return nil, err
+		} else {
+			fmt.Println(query)
+			query.Role = "unauthorized"
+			query.Username = "unauthorized"
+			return &query, nil
+		}
 	}
 
 	username, role := s.SessionValidator.IsAuthorized(c.Value)
-	if len(username) == 0 {
-		return nil, errors.New("unauthorized")
+	if len(username) == 0 && (strings.Split(r.URL.Path, "/")[2] != "teams") {
+		if r.Method == "GET" {
+			http.Redirect(w, r, "http://чёрныйящик.рф/signin", http.StatusSeeOther)
+			return nil, errors.New("unauthorized")
+		} else {
+			query.Role = "unauthorized"
+			query.Username = "unauthorized"
+		}
 	} else {
 		query.Role = role
 		query.Username = username
@@ -85,6 +102,18 @@ func (q *QueryProcess) ParseMethod(r *http.Request) error {
 	return nil
 }
 
+func (q *QueryProcess) ParseRequest(r *http.Request) {
+	q.Args = strings.Split(r.URL.Path, "/")
+	b, err := io.ReadAll(r.Body)
+
+	if err != nil {
+		q.Payload = ""
+	}
+
+	defer r.Body.Close()
+	q.Payload = string(b)
+}
+
 func (q *QueryProcess) ParseCommand(user string) error {
 	if len(q.Args) < 3 {
 		return errors.New("command not specified")
@@ -98,6 +127,10 @@ func (q *QueryProcess) ParseCommand(user string) error {
 	}
 
 	q.Args = q.Args[3:]
+
+	if len(q.Payload) > 0 {
+		q.Args = append(q.Args, q.Payload)
+	}
 	return nil
 }
 
@@ -131,7 +164,6 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	q, err := s.AuthorizeQuery(w, r)
 	if err != nil {
-		http.Redirect(w, r, "http://чёрныйящик.рф/signin", http.StatusSeeOther)
 		return
 	}
 
@@ -140,7 +172,7 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q.Args = strings.Split(r.URL.Path, "/")
+	q.ParseRequest(r)
 	if q.Args[1] == "app" {
 		Proxy("http://192.168.88.250:8081", w, r)
 		return
@@ -164,6 +196,28 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err = q.ParseCommand(q.Username)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if q.Command == "teams" {
+		res, err := s.QueryExecuter.Execute(q.Command, q.Method, []string{})
+		if err != nil {
+			fmt.Println(q.Command, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, res)
+		return
+	}
+
+	if q.Command == "self" {
+		res, err := s.QueryExecuter.Execute(q.Command, q.Method, []string{q.Username})
+		if err != nil {
+			fmt.Println(q.Command, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, res)
 		return
 	}
 
@@ -195,7 +249,7 @@ func (s *RestService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.QueryExecuter.Execute(q.Command, q.Method, q.Args)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(q.Command, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

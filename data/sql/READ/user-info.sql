@@ -1,10 +1,10 @@
 SELECT
     username,
-    shortname,
     fullname,
     email,
     team_role,
     teamname,
-    about
+    about,
+    id
 FROM
     users;

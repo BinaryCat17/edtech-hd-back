@@ -1,11 +1,17 @@
 SELECT
-    cc.checkname,
     cc.compname,
-    cc.comptier,
-    cc.description,
+    cc.checkname,
+    uc.username,
+    CASE WHEN ucc.username = uc.username THEN ucc.votes ELSE 0 END AS votes,
     cc.maxvotes,
-    CASE WHEN u.username = $1 THEN u.votes ELSE 0 END as votes
+    cc.level,
+    cc.description
 FROM
-    compchecks cc
-    LEFT OUTER JOIN usercomps u ON u.checkname = cc.checkname AND u.username = $1
-    ORDER BY cc.comptier, votes DESC;
+    (
+        usercomps uc
+        JOIN compchecks cc ON uc.compname = cc.compname
+    )
+    LEFT OUTER JOIN usercompchecks ucc ON ucc.username = uc.username
+    AND ucc.compname = uc.compname
+    AND ucc.checkname = cc.checkname
+    ORDER BY cc.level

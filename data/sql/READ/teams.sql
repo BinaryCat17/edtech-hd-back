@@ -1,0 +1,1 @@
+SELECT teamname FROM teams;

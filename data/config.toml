@@ -14,7 +14,8 @@ port = "5432"
 user = "binarycat"
 
 [access.unauthorized]
-read-public = ["login"]
+read-public = ["login", "teams"]
+  
 write-public = ["register"]
 
 [access.user]
@@ -30,10 +31,17 @@ read-public = [
   "comp-checks",
   "get-file",
   "user-attach",
-  "user-comp-preview"
+  "user-comp-preview",
+  "comp-comment",
+  "comp-status",
+  "comp-level",
+  "user-review",
+  "kanban",
+  "team-user-info"
 ]
+write-public = ["kanban"]
 write-private = ["self-info, user-comps", "save-file", "user-attach"]
 
 [access.teamlead]
 extends = ["user"]
-write-public = ["user-team-info", "save-file"]
+write-public = ["user-team-info", "save-file", "comp-comment", "comp-status", "comp-check", "comp-level"]

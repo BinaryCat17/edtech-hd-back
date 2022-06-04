@@ -1,13 +1,13 @@
 SELECT
-    DISTINCT c.compname,
-    c.description,
+    uc.username,
+    uc.currentlevel,
+    c.compname,
     c.levelcount,
+    c.description,
     c.color
 FROM
-    usercomps u,
-    compchecks cc,
+    usercomps uc,
     comps c
 WHERE
-    u.username = $1
-    AND u.checkname = cc.checkname
-    AND cc.compname = c.compname;
+    uc.compname = c.compname
+ORDER BY uc.username, uc.currentlevel;

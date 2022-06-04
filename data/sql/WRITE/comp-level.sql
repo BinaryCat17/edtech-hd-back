@@ -1,0 +1,1 @@
+UPDATE usercomps SET currentlevel = $3 WHERE username = $1 AND compname = $2;

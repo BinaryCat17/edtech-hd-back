@@ -1,1 +1,1 @@
-select * from comps;
+select compname, color, levelcount, description from comps;
